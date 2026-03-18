@@ -10,7 +10,7 @@ class DevKit:
         self.current_user = None
         
         # GitHub Configuration for Apps Store
-        self.token = "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"
+        self.token = "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"
         self.repo = "khush-SecondTheCoddee/TERMOS-APPS"
         self.api_url = f"https://api.github.com/repos/{self.repo}/contents/"
         
