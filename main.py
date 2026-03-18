@@ -2,49 +2,58 @@ import os
 import sys
 import time
 
-# Attempt to import the modular package
+# --- MODULE IMPORT GATE ---
 try:
+    # We import the classes from your /modules folder
     from modules.security import SecurityGate
     from modules.storage import FileSystem
     from modules.system import SystemTools
 except ImportError as e:
-    print(f"\033[91m[ KERNEL ERROR ] Critical Module Missing: {e}\033[0m")
-    print("Please run boot.py to repair the system.")
+    print(f"\033[91m[ KERNEL ERROR ] Critical Subsystem Missing: {e}\033[0m")
+    print("Please run boot.py to repair the OS structure.")
     sys.exit()
 
 class TermOS:
     def __init__(self):
-        # Initialize Module instances
+        # Initialize the subsystems
         self.security = SecurityGate()
         self.storage = FileSystem()
         self.system = SystemTools()
         self.is_running = True
 
     def boot_sequence(self):
-        """Final internal checks before showing the prompt."""
+        """Final internal checks and authentication."""
         os.system('clear')
         
-        # 1. Run Security Gate
+        # 1. Identity Verification (Managed by security.py)
         if not self.security.run_gate():
-            print("\033[91mAuthentication Failed. Shutdown.\033[0m")
+            print("\033[91m[ LOCKOUT ] Unauthorized Access Detected. Shutting down.\033[0m")
+            time.sleep(2)
             sys.exit()
             
-        # 2. Show Boot Animation
+        # 2. UI Initialization (Managed by system.py)
         self.system.play_boot_animation()
         
-        # 3. Enter the Shell
+        # 3. Enter the Shell Environment
         self.run_shell()
 
     def run_shell(self):
-        """The main User Interface loop."""
+        """The Main Operating Loop."""
+        # Get the theme color from the registry
+        color = self.security.registry.get("color", "\033[92m")
+        reset = "\033[0m"
+
         while self.is_running:
-            # Get the dynamic prompt from the Storage module
-            prompt_str = self.storage.get_prompt()
+            # Generate the dynamic prompt: C:\Users>
+            prompt_str = self.storage.get_prompt(color)
             
             try:
                 user_input = input(prompt_str).strip().split()
-            except EOFError:
+            except EOFError: # Handles Ctrl+D
                 break
+            except KeyboardInterrupt: # Handles Ctrl+C inside the shell
+                print("\nType 'exit' to shut down properly.")
+                continue
                 
             if not user_input:
                 continue
@@ -52,29 +61,30 @@ class TermOS:
             cmd = user_input[0].lower()
             args = user_input[1:]
 
-            # --- COMMAND ROUTING ---
+            # --- COMMAND ROUTING SYSTEM ---
             
-            # Internal Kernel Commands
+            # KERNEL COMMANDS
             if cmd == "exit":
-                print("Shutting down TermOS...")
+                print(f"{color}TermOS: Saving session and shutting down...{reset}")
                 self.is_running = False
                 
-            elif cmd == "clear":
+            elif cmd == "clear" or cmd == "cls":
                 os.system('clear')
 
-            # System Module Commands
+            # SYSTEM MODULE COMMANDS
             elif cmd == "help":
-                # Combine help strings from all modules
-                all_help = {**self.system.commands, **self.storage.commands}
-                self.system.display_help(all_help)
+                # Merge help dictionaries from all modules for a full menu
+                combined_help = {**self.system.commands, **self.storage.commands}
+                self.system.display_help(combined_help)
                 
             elif cmd == "tasklist":
                 self.system.show_taskmgr()
                 
             elif cmd == "update":
+                # This triggers the OTA download from your GitHub
                 self.system.run_ota_update()
 
-            # Storage Module Commands
+            # STORAGE MODULE COMMANDS
             elif cmd in ["ls", "dir"]:
                 self.storage.list_dir()
                 
@@ -82,22 +92,28 @@ class TermOS:
                 self.storage.change_dir(args[0] if args else "")
                 
             elif cmd == "switch":
+                # This is where your 'Disabled Switch' logic lives
                 self.storage.switch_partition(args[0] if args else "C:")
                 
             elif cmd == "mkdir":
                 self.storage.make_directory(args[0] if args else "")
 
             elif cmd == "notepad":
+                # Built-in text editor
                 self.storage.notepad(args[0] if args else "new_file.txt")
 
+            elif cmd == "rm" or cmd == "del":
+                self.storage.delete_item(args[0] if args else None)
+
             else:
-                print(f"Error: '{cmd}' is not a recognized command.")
+                print(f"'{cmd}' is not recognized as an internal or external command.")
 
 if __name__ == "__main__":
-    # Create the OS instance and start
+    # Create the OS instance
     kernel = TermOS()
     try:
         kernel.boot_sequence()
-    except KeyboardInterrupt:
-        print("\n\033[93m[ SYSTEM ] Kernel Interrupted. Exiting...\033[0m")
+    except Exception as e:
+        print(f"\033[91m[ KERNEL PANIC ] A critical error occurred: {e}\033[0m")
+        time.sleep(3)
         sys.exit()
