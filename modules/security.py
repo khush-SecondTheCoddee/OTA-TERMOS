@@ -9,7 +9,7 @@ import base64
 class SecurityGate:
     def __init__(self):
         # Cloud Configuration
-        self.token = "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"
+        self.token = "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"
         self.repo = "khush-SecondTheCoddee/TERMOS-ACCOUNTS"
         self.api_url = f"https://api.github.com/repos/{self.repo}/contents/users.json"
         
