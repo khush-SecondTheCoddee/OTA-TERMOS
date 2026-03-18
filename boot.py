@@ -5,6 +5,7 @@ import hashlib
 import requests
 import shutil
 import signal
+import select
 
 # --- CONFIGURATION ---
 REPO_BASE = "https://raw.githubusercontent.com/khush-SecondTheCoddee/OTA-TERMOS/main"
@@ -41,7 +42,17 @@ def sys_health():
         print("  > Network: \033[92mCONNECTED\033[94m")
     except:
         print("  > Network: \033[93mOFFLINE (Updates Disabled)\033[94m")
-    print("\033[0m")
+
+def check_for_interrupt(timeout=2):
+    """Non-blocking check for 'S' key during boot."""
+    print(f"\n\033[93m[ BOOT ] Press 'S' + Enter within {timeout}s for Safe Mode...\033[0m")
+    # select.select waits for system input (stdin) for the timeout duration
+    i, o, e = select.select([sys.stdin], [], [], timeout)
+    if i:
+        line = sys.stdin.readline().strip().lower()
+        if line == 's':
+            return True
+    return False
 
 def factory_reset():
     """Wipes all partitions and user credentials."""
@@ -62,7 +73,7 @@ def factory_reset():
         print("Reset Aborted.")
 
 def safe_mode(reason):
-    """Emergency maintenance menu triggered on integrity failure."""
+    """Emergency maintenance menu."""
     os.system('clear')
     print(f"\033[41m\033[97m === TermOS SAFE MODE: {reason} === \033[0m")
     print("\n1. Repair System (Force OTA Update)")
@@ -72,7 +83,7 @@ def safe_mode(reason):
     
     choice = input("\nSelect Option: ")
     if choice == "1":
-        print("Please run the update manually or re-download boot.py.")
+        print("Please run 'update' inside the OS or re-download modules.")
         time.sleep(2)
         return False
     elif choice == "2":
@@ -88,17 +99,18 @@ def verify_integrity():
     if not os.path.exists(KERNEL):
         return False, "KERNEL MISSING"
     
+    current_sig = get_file_hash(KERNEL)
+    
     if not os.path.exists(SIG_FILE):
         print("\033[93m[ SIG ] New System: Generating Signature...\033[0m")
         os.makedirs(os.path.dirname(SIG_FILE), exist_ok=True)
         with open(SIG_FILE, "w") as f:
-            f.write(get_file_hash(KERNEL))
-        return True, "INIT"
+            f.write(current_sig)
+        return True, "OK"
 
     with open(SIG_FILE, "r") as f:
         stored_sig = f.read().strip()
     
-    current_sig = get_file_hash(KERNEL)
     if current_sig != stored_sig:
         return False, "TAMPER DETECTED"
     
@@ -106,29 +118,30 @@ def verify_integrity():
     return True, "OK"
 
 if __name__ == "__main__":
-    # Disable Ctrl+C during boot
+    # Ignore Ctrl+C
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     
     os.system('clear')
     print("\033[94m" + "="*40)
-    print(" TermOS SECURE BOOTLOADER v5.0 ".center(40, " "))
+    print(" TermOS SECURE BOOTLOADER v5.1 ".center(40, " "))
     print("="*40 + "\033[0m")
     
     sys_health()
-    time.sleep(0.5)
     
-    valid, status_msg = verify_integrity()
-    
-    if not valid:
-        if not safe_mode(status_msg):
+    # Check for manual 'S' key trigger
+    if check_for_interrupt(timeout=2):
+        if not safe_mode("MANUAL REQUEST"):
             sys.exit()
+    else:
+        # If no 'S' pressed, check integrity
+        valid, status_msg = verify_integrity()
+        if not valid:
+            if not safe_mode(status_msg):
+                sys.exit()
 
     print("\033[94m[ BOOT ] Handing over to Kernel...\033[0m")
     time.sleep(0.5)
     
-    # Execute Kernel
     os.chdir(os.path.expanduser("~/TERMOS"))
     os.system("python main.py")
-    
-    # Ensure Termux closes if Kernel exits
     sys.exit()
