@@ -6,6 +6,8 @@ import requests
 import shutil
 import signal
 import select
+import tty
+import termios
 
 # --- CONFIGURATION ---
 REPO_BASE = "https://raw.githubusercontent.com/khush-SecondTheCoddee/OTA-TERMOS/main"
@@ -27,7 +29,7 @@ def get_file_hash(path):
         return None
 
 def sys_health():
-    """Performs pre-boot hardware and network diagnostics."""
+    """Performs pre-boot hardware diagnostics."""
     print("\033[94m[ HEALTH ] Scanning Hardware Environment...")
     try:
         _, _, free = shutil.disk_usage("/")
@@ -41,17 +43,29 @@ def sys_health():
         requests.get("https://github.com", timeout=2)
         print("  > Network: \033[92mCONNECTED\033[94m")
     except:
-        print("  > Network: \033[93mOFFLINE (Updates Disabled)\033[94m")
+        print("  > Network: \033[93mOFFLINE\033[94m")
 
 def check_for_interrupt(timeout=2):
-    """Non-blocking check for 'S' key during boot."""
-    print(f"\n\033[93m[ BOOT ] Press 'S' + Enter within {timeout}s for Safe Mode...\033[0m")
-    # select.select waits for system input (stdin) for the timeout duration
-    i, o, e = select.select([sys.stdin], [], [], timeout)
-    if i:
-        line = sys.stdin.readline().strip().lower()
-        if line == 's':
-            return True
+    """Detects CTRL+@ (ASCII 0) using Raw Mode."""
+    print(f"\n\033[93m[ BOOT ] Hold CTRL+@ within {timeout}s for Safe Mode...\033[0m")
+    
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        # Switch to Raw Mode to catch keys without 'Enter'
+        tty.setraw(sys.stdin.fileno())
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                char = sys.stdin.read(1)
+                # chr(0) is the value for CTRL+@ or CTRL+Space
+                if char == chr(0):
+                    return True
+    except Exception:
+        pass
+    finally:
+        # Restore terminal to normal mode
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return False
 
 def factory_reset():
@@ -65,7 +79,6 @@ def factory_reset():
         for path in to_delete:
             if os.path.exists(path):
                 shutil.rmtree(path)
-                print(f"  > Deleted: {os.path.basename(path)}")
         print("\033[92m[ SUCCESS ] System Reset. Exiting...\033[0m")
         time.sleep(2)
         sys.exit()
@@ -83,7 +96,7 @@ def safe_mode(reason):
     
     choice = input("\nSelect Option: ")
     if choice == "1":
-        print("Please run 'update' inside the OS or re-download modules.")
+        print("Please run 'update' inside the OS or refresh via GitHub.")
         time.sleep(2)
         return False
     elif choice == "2":
@@ -95,14 +108,13 @@ def safe_mode(reason):
         sys.exit()
 
 def verify_integrity():
-    """Verifies that the Kernel hasn't been tampered with."""
+    """Verifies SHA-256 Kernel Signature."""
     if not os.path.exists(KERNEL):
         return False, "KERNEL MISSING"
     
     current_sig = get_file_hash(KERNEL)
     
     if not os.path.exists(SIG_FILE):
-        print("\033[93m[ SIG ] New System: Generating Signature...\033[0m")
         os.makedirs(os.path.dirname(SIG_FILE), exist_ok=True)
         with open(SIG_FILE, "w") as f:
             f.write(current_sig)
@@ -118,28 +130,27 @@ def verify_integrity():
     return True, "OK"
 
 if __name__ == "__main__":
-    # Ignore Ctrl+C
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     
     os.system('clear')
     print("\033[94m" + "="*40)
-    print(" TermOS SECURE BOOTLOADER v5.1 ".center(40, " "))
+    print(" TermOS SECURE BOOTLOADER v5.2 ".center(40, " "))
     print("="*40 + "\033[0m")
     
     sys_health()
     
-    # Check for manual 'S' key trigger
+    # Check for manual CTRL+@ trigger
     if check_for_interrupt(timeout=2):
-        if not safe_mode("MANUAL REQUEST"):
+        if not safe_mode("SECURE INTERRUPT"):
             sys.exit()
     else:
-        # If no 'S' pressed, check integrity
+        # Standard integrity check
         valid, status_msg = verify_integrity()
         if not valid:
             if not safe_mode(status_msg):
                 sys.exit()
 
-    print("\033[94m[ BOOT ] Handing over to Kernel...\033[0m")
+    print("\033[94m[ BOOT ] Launching Kernel...\033[0m")
     time.sleep(0.5)
     
     os.chdir(os.path.expanduser("~/TERMOS"))
