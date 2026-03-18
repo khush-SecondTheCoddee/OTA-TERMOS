@@ -13,7 +13,6 @@ import termios
 REPO_BASE = "https://raw.githubusercontent.com/khush-SecondTheCoddee/OTA-TERMOS/main"
 SIG_FILE = os.path.expanduser("~/TERMOS/system/sig.dat")
 KERNEL = os.path.expanduser("~/TERMOS/main.py")
-REGISTRY = os.path.expanduser("~/TERMOS/system/registry.json")
 FILES_DIR = os.path.expanduser("~/TERMOS/FILES")
 
 def get_file_hash(path):
@@ -40,10 +39,11 @@ def sys_health():
         print("  > Storage: Unknown")
     
     try:
+        # Check connection to your auth server
         requests.get("https://github.com", timeout=2)
-        print("  > Network: \033[92mCONNECTED\033[94m")
+        print("  > Cloud Network: \033[92mCONNECTED\033[94m")
     except:
-        print("  > Network: \033[93mOFFLINE\033[94m")
+        print("  > Cloud Network: \033[93mOFFLINE\033[94m")
 
 def check_for_interrupt(timeout=2):
     """Detects CTRL+@ (ASCII 0) using Raw Mode."""
@@ -69,7 +69,7 @@ def check_for_interrupt(timeout=2):
     return False
 
 def factory_reset():
-    """Wipes all partitions and user credentials."""
+    """Wipes all partitions and system settings."""
     print("\n\033[41m\033[97m !!! WARNING: DESTRUCTIVE ACTION !!! \033[0m")
     confirm = input("Type 'CONFIRM' to wipe all data and passwords: ")
     
@@ -96,7 +96,7 @@ def safe_mode(reason):
     
     choice = input("\nSelect Option: ")
     if choice == "1":
-        print("Please run 'update' inside the OS or refresh via GitHub.")
+        print("Run 'update' inside the OS or refresh via GitHub.")
         time.sleep(2)
         return False
     elif choice == "2":
@@ -130,6 +130,7 @@ def verify_integrity():
     return True, "OK"
 
 if __name__ == "__main__":
+    # Ignore Ctrl+C
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     
     os.system('clear')
@@ -153,6 +154,9 @@ if __name__ == "__main__":
     print("\033[94m[ BOOT ] Launching Kernel...\033[0m")
     time.sleep(0.5)
     
+    # Switch directory and launch main.py
     os.chdir(os.path.expanduser("~/TERMOS"))
     os.system("python main.py")
+    
+    # Close Termux session after Kernel exit
     sys.exit()
