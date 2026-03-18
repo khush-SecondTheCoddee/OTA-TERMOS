@@ -1,82 +1,97 @@
 import os
 import sys
 import time
+import hashlib
 import requests
+import shutil
 import signal
 
-# --- SYSTEM CONFIGURATION ---
+# --- CONFIGURATION ---
 REPO_BASE = "https://raw.githubusercontent.com/khush-SecondTheCoddee/OTA-TERMOS/main"
-CORE_FILES = ["main.py"]
-MODULE_FILES = ["__init__.py", "security.py", "storage.py", "system.py"]
+SIG_FILE = os.path.expanduser("~/TERMOS/system/sig.dat")
+KERNEL = os.path.expanduser("~/TERMOS/main.py")
 
-def disable_interrupts():
-    """Prevents the user from stopping the boot process with Ctrl+C."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-def clear():
-    os.system('clear')
-
-def check_structure():
-    """Ensures necessary OS directories exist."""
-    paths = ["system", "FILES/C", "modules"]
-    for p in paths:
-        full_path = os.path.expanduser(f"~/TERMOS/{p}")
-        if not os.path.exists(full_path):
-            os.makedirs(full_path, exist_ok=True)
-
-def fetch_file(filepath):
-    """Emergency OTA recovery if a system file is missing."""
-    url = f"{REPO_BASE}/{filepath}"
-    local_path = os.path.expanduser(f"~/TERMOS/{filepath}")
+def get_file_hash(path):
+    """Generates a SHA-256 hash of the Kernel file."""
+    sha256_hash = hashlib.sha256()
     try:
-        print(f"\033[93m[ RECOVERY ] Downloading {filepath}...\033[0m")
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        with open(local_path, "w") as f:
-            f.write(r.text)
-        return True
-    except Exception:
+        with open(path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except FileNotFoundError:
+        return None
+
+def sys_health():
+    """Checks Disk and Network status."""
+    print("\033[94m[ HEALTH ] Scanning Hardware...")
+    _, _, free = shutil.disk_usage("/")
+    free_gb = free // (2**30)
+    
+    status = "OK" if free_gb > 1 else "LOW STORAGE"
+    print(f"  > Disk Space: {free_gb}GB Free [{status}]")
+    
+    try:
+        requests.get("https://github.com", timeout=2)
+        print("  > Network: Connected [ONLINE]\033[0m")
+    except:
+        print("  > Network: Offline [OFFLINE]\033[0m")
+
+def safe_mode():
+    """Emergency recovery menu if integrity fails."""
+    os.system('clear')
+    print("\033[41m\033[97m === TermOS SAFE MODE === \033[0m")
+    print("\n1. Full System Repair (Force OTA)")
+    print("2. Reset Registry (Wipe Password)")
+    print("3. Exit to Termux")
+    
+    choice = input("\nSelect Option: ")
+    if choice == "1":
+        print("Initiating Repair...")
+        # This would normally call a repair function
+        return False 
+    elif choice == "2":
+        reg = os.path.expanduser("~/TERMOS/system/registry.json")
+        if os.path.exists(reg): os.remove(reg)
+        print("Registry Wiped. Rebooting...")
+        time.sleep(2)
         return False
+    else:
+        sys.exit()
 
-def run_boot():
-    clear()
-    print("\033[94m" + "="*40)
-    print(" TermOS SECURE BOOT v4.0 ".center(40, " "))
-    print("="*40 + "\033[0m")
+def verify_integrity():
+    """Checks if the Kernel matches the last recorded signature."""
+    if not os.path.exists(KERNEL):
+        return False
     
-    check_structure()
-    
-    # 1. Integrity Check: Core & Modules
-    all_files = CORE_FILES + [f"modules/{m}" for m in MODULE_FILES]
-    for file in all_files:
-        if not os.path.exists(os.path.expanduser(f"~/TERMOS/{file}")):
-            print(f"\033[91m[ ! ] System Corrupted: {file} missing.\033[0m")
-            if not fetch_file(file):
-                print("\033[91m[ FATAL ] OTA Recovery Failed. Check Network.\033[0m")
-                time.sleep(3)
-                sys.exit()
+    if not os.path.exists(SIG_FILE):
+        print("\033[93m[ SIG ] Initializing Master Signature...\033[0m")
+        with open(SIG_FILE, "w") as f:
+            f.write(get_file_hash(KERNEL))
+        return True
 
-    print("\033[92m[ OK ] System Integrity Verified.")
-    print("[ OK ] Bootloader Locked.\033[0m")
-    time.sleep(1)
-
-    # 2. Handoff to Kernel
-    # We change directory to ensure imports work correctly
-    os.chdir(os.path.expanduser("~/TERMOS"))
+    with open(SIG_FILE, "r") as f:
+        stored_sig = f.read().strip()
     
-    # Execute main.py. If main.py exits, the script ends.
-    os.system("python main.py")
+    if get_file_hash(KERNEL) != stored_sig:
+        print("\033[41m[ ALERT ] KERNEL INTEGRITY FAILURE!\033[0m")
+        return False
+    
+    print("\033[92m[ SIG ] Kernel Verified: Authentic\033[0m")
+    return True
 
 if __name__ == "__main__":
-    # Lock the environment
-    disable_interrupts()
+    signal.signal(signal.SIGINT, signal.SIG_IGN) # Disable Ctrl+C
+    os.system('clear')
+    print("\033[94mTermOS Secure Bootloader Loading...\033[0m")
     
-    try:
-        run_boot()
-    except Exception as e:
-        print(f"Boot Error: {e}")
-        time.sleep(2)
+    sys_health()
+    time.sleep(1)
     
-    # Critical: This prevents the user from reaching the Termux prompt 
-    # if you've added this script to your .bashrc
-    sys.exit()
+    if not verify_integrity():
+        safe_mode()
+        sys.exit()
+
+    print("\033[94mHanding over to Kernel...\033[0m")
+    os.chdir(os.path.expanduser("~/TERMOS"))
+    os.system("python main.py")
