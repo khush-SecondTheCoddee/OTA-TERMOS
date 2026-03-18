@@ -14,7 +14,7 @@ class SecurityGate:
         self.registry = {
             "username": "Admin",
             "password_hash": None,
-            "color": "\033[92m", # Green (Default)
+            "color": "\033[92m", # Default Green
             "last_login": "Never",
             "access_level": 1
         }
@@ -26,27 +26,21 @@ class SecurityGate:
         if os.path.exists(self.reg_path):
             try:
                 with open(self.reg_path, "r") as f:
-                    data = json.load(f)
-                    self.registry.update(data)
+                    self.registry.update(json.load(f))
             except Exception:
-                # If file is corrupted, we keep defaults
+                # If corrupted, keep defaults to prevent boot crash
                 pass
         else:
-            self._ensure_dir()
             self.save_registry()
-
-    def _ensure_dir(self):
-        """Creates the system directory if it's missing."""
-        os.makedirs(os.path.dirname(self.reg_path), exist_ok=True)
 
     def save_registry(self):
         """Saves current settings to the JSON registry file."""
-        self._ensure_dir()
+        os.makedirs(os.path.dirname(self.reg_path), exist_ok=True)
         with open(self.reg_path, "w") as f:
             json.dump(self.registry, f, indent=4)
 
     def hash_password(self, password):
-        """Standard SHA-256 hashing."""
+        """Standard SHA-256 hashing for credential security."""
         return hashlib.sha256(password.encode()).hexdigest()
 
     def run_gate(self):
@@ -58,46 +52,44 @@ class SecurityGate:
         
         # --- FIRST TIME SETUP ---
         if self.registry["password_hash"] is None:
-            print("\033[93m[ ! ] No Admin password detected. Starting Setup...\033[0m")
-            user = input("Set Username: ").strip() or "Admin"
+            print("\033[93m[ ! ] No Admin detected. Starting Identity Setup...\033[0m")
+            user = input("Choose Username: ").strip() or "Admin"
             
             while True:
                 pwd = getpass.getpass("Create System Password: ")
-                confirm = getpass.getpass("Confirm Password: ")
+                conf = getpass.getpass("Confirm Password: ")
                 
-                if pwd == confirm and len(pwd) > 0:
+                if pwd == conf and len(pwd) > 0:
                     self.registry["username"] = user
                     self.registry["password_hash"] = self.hash_password(pwd)
                     self.save_registry()
-                    print(f"\n{color}[ SUCCESS ] Credentials Encrypted. Rebooting...{reset}")
+                    print(f"\n{color}[ SUCCESS ] Identity Encrypted. Rebooting Kernel...{reset}")
                     time.sleep(1.5)
                     return True
                 else:
-                    print("\033[91mPasswords do not match or are empty. Try again.\033[0m")
+                    print("\033[91mPasswords do not match. Try again.\033[0m")
 
-        # --- STANDARD LOGIN ---
+        # --- LOGIN CHALLENGE ---
         attempts = 3
         while attempts > 0:
             try:
                 entry = getpass.getpass(f"Password for {self.registry['username']}: ")
                 if self.hash_password(entry) == self.registry["password_hash"]:
-                    print(f"{color}[ ACCESS GRANTED ] Welcome back, {self.registry['username']}.{reset}")
+                    print(f"{color}[ ACCESS GRANTED ] Welcome, {self.registry['username']}.{reset}")
                     self.registry["last_login"] = time.ctime()
                     self.save_registry()
                     time.sleep(0.5)
                     return True
                 else:
                     attempts -= 1
-                    print(f"\033[91m[ ERROR ] Invalid Password. {attempts} attempts left.\033[0m")
+                    print(f"\033[91m[ DENIED ] Invalid Password. {attempts} left.\033[0m")
             except KeyboardInterrupt:
-                # Bootloader will catch the exit if interrupts are ignored there
-                print("\nLogin Aborted.")
                 return False
         
         return False
 
-    def change_theme(self, color_name):
-        """Optional feature to change OS colors via command."""
+    def update_theme(self, color_name):
+        """Changes the OS theme color in the registry."""
         themes = {
             "green": "\033[92m",
             "blue": "\033[94m",
@@ -109,6 +101,6 @@ class SecurityGate:
         if color_name in themes:
             self.registry["color"] = themes[color_name]
             self.save_registry()
-            print(f"Theme updated to {color_name}. Restart required.")
+            print(f"Theme updated to {color_name}. Changes will apply on next command.")
         else:
-            print(f"Available themes: {', '.join(themes.keys())}")
+            print(f"Available: {', '.join(themes.keys())}")
