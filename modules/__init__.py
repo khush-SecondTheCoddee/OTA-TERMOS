@@ -1,5 +1,9 @@
-# TermOS Module Package
-# Version: 2.5.0
-# Author: Khush
+# TermOS Subsystem Package Initializer
+# This file allows modular importing of Security, Storage, System, and DevKit.
 
-__all__ = ["security", "storage", "system"]
+from .security import SecurityGate
+from .storage import FileSystem
+from .system import SystemTools
+from .dev import DevKit
+
+__all__ = ['SecurityGate', 'FileSystem', 'SystemTools', 'DevKit']
